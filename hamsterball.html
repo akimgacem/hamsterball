@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hamsterball</title>
+<style>
+div.notes {
+width: 800px;
+border: 1px solid #cccccc;
+text-align: left;
+padding: 5px;
+font-family: monospace;
+}
+
+div.settings {
+width: 800px;
+border: 1px solid #cccccc;
+font-family: monospace;
+font-size: 14px;
+}
+
+table, th, td {
+border: 0px;
+}
+
+.slider {
+width: 95%;
+}
+</style>
+
+<script src="./scripts/glMatrix-0.9.5.min.js" type="text/javascript"></script>
+
+<script src="./script.js" type="text/javascript"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+varying highp vec2 vTextureCoord;
+
+uniform sampler2D uSampler;
+
+void main(void) {
+    gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+}
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+attribute vec3 aVertexPosition;
+attribute vec2 aTextureCoord;
+
+uniform mat4 uMVMatrix;
+uniform mat4 uPMatrix;
+
+varying highp vec2 vTextureCoord;
+
+void main(void) {
+    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+	vTextureCoord = aTextureCoord;
+}
+</script>
+
+</head>
+<body onload="start()">
+
+<center>
+<h1>Hamsterball</h1>
+<div>
+
+<canvas id="canvas" width="1280px" height="720px" style="border:2px solid #bbbbbb;">
+Your browser does not appear to support HTML canvas.
+</canvas>
+
+</div>
+
+<br>
+
+<h2>settings</h2>
+<br>
+<div class="settings">
+<table width="90%">
+<tr>
+<td width="33%" align="center">
+rotation X
+<br>
+<span id="rotationXText">0.0000</span>
+</td>
+<td width="34%" align="center">
+rotation Y
+<br>
+<span id="rotationYText">0.0000</span>
+</td>
+<td width="33%" align="center">
+rotation Z
+<br>
+<span id="rotationZText">0.0000</span>
+</td>
+</tr>
+</table>
+<br>
+Use the arrow keys, page up and page down to change the cube rotation speed.
+</div>
+
+
+<h2>patch notes</h2>
+<br>
+<div class="notes" id="patchNotesDiv">
+</div>
+
+<br>
+</center>
+</body>
+
+<script>
+var text = new XMLHttpRequest();
+text.open("GET", "./notes.txt", true);
+text.onreadystatechange = function() {
+  if(text.readyState == 4 && text.status == 200){
+    document.getElementById("patchNotesDiv").innerHTML =
+    text.responseText.replace(new RegExp("\n", "g"), "<br>")
+	.replace(new RegExp("\t", "g"), "&nbsp;&nbsp;");
+  }
+}
+text.send(null);
+</script>
+
+</html>
