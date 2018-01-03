@@ -4,6 +4,7 @@ var shaderProgram;
 
 
 var cubeVertexPositionBuffer;
+var cubeVertexNormalBuffer;
 var cubeVertexTextureCoordBuffer;
 var cubeVertexIndexBuffer;
 
@@ -30,6 +31,8 @@ var cubeRotationZVel = 0.0;
 
 var keySet = {};
 
+var modelInstances = [];
+
 
 window.addEventListener("keydown", function(event) {
 	if([32, 33, 34, 37, 38, 39, 40].indexOf(event.keyCode) > -1) {
@@ -37,6 +40,17 @@ window.addEventListener("keydown", function(event) {
 	}
 }, false);
 
+function ModelInstance(model) {
+	this.vertexPositionBuffer = [];
+	this.vertexNormalBuffer = [];
+	this.vertexTextureCoordBuffer = [];
+	this.vertexIndexBuffer = [];
+	
+	this.texture = null;
+	
+	this.mvMatrix = mat4.identity(mat4.create());
+	
+}
 
 function initGL(canvas) {
 	gl = null;
@@ -97,9 +111,6 @@ function initShaders() {
 	var fragmentShader = getShader(gl, "shader-fs");
 	var vertexShader = getShader(gl, "shader-vs");
 	
-	if(!vertexShader) {
-	}
-	
 	shaderProgram = gl.createProgram();
 	gl.attachShader(shaderProgram, vertexShader);
 	gl.attachShader(shaderProgram, fragmentShader);
@@ -114,19 +125,34 @@ function initShaders() {
 	shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
 	gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
 	
+	shaderProgram.vertexNormalAttribute = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+	gl.enableVertexAttribArray(shaderProgram.vertexNormalAttribute);
+	
 	shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
 	gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
 	
-	shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+	shaderProgram.pMatrixUniform  = gl.getUniformLocation(shaderProgram, "uPMatrix");
 	shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+	shaderProgram.nMatrixUniform  = gl.getUniformLocation(shaderProgram, "uNMatrix");
 	
 	shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
+	
+	shaderProgram.ambientColorUniform = gl.getUniformLocation(shaderProgram, "uAmbientColor");
+	
+	shaderProgram.lightingDirectionUniform = gl.getUniformLocation(shaderProgram, "uLightingDirection");
+	
+	shaderProgram.directionalColorUniform = gl.getUniformLocation(shaderProgram, "uDirectionalColor");
 }
 
 
 function setMatrixUniforms() {
 	gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);
 	gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);
+	
+	var normalMatrix = mat3.create();
+	mat4.toInverseMat3(mvMatrix, normalMatrix);
+	mat3.transpose(normalMatrix);
+	gl.uniformMatrix3fv(shaderProgram.nMatrixUniform, false, normalMatrix);
 }
 
 function initTextures() {
@@ -208,6 +234,47 @@ function initBuffers() {
 	cubeVertexPositionBuffer.itemSize = 3;
 	cubeVertexPositionBuffer.numItems = 24;
 	
+	
+	cubeVertexNormalBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexNormalBuffer);
+	
+	var vertexNormals = [
+	0.0, 0.0, 1.0,
+	0.0, 0.0, 1.0,
+	0.0, 0.0, 1.0,
+	0.0, 0.0, 1.0,
+	
+	0.0, 0.0, -1.0,
+	0.0, 0.0, -1.0,
+	0.0, 0.0, -1.0,
+	0.0, 0.0, -1.0,
+	
+	0.0, 1.0, 0.0,
+	0.0, 1.0, 0.0,
+	0.0, 1.0, 0.0,
+	0.0, 1.0, 0.0,
+	
+	0.0, -1.0, 0.0,
+	0.0, -1.0, 0.0,
+	0.0, -1.0, 0.0,
+	0.0, -1.0, 0.0,
+	
+	1.0, 0.0, 0.0,
+	1.0, 0.0, 0.0,
+	1.0, 0.0, 0.0,
+	1.0, 0.0, 0.0,
+	
+	-1.0, 0.0, 0.0,
+	-1.0, 0.0, 0.0,
+	-1.0, 0.0, 0.0,
+	-1.0, 0.0, 0.0
+	];
+	
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexNormals), gl.STATIC_DRAW);
+	cubeVertexNormalBuffer.itemSize = 3;
+	cubeVertexNormalBuffer.numItems = 24;
+	
+	
 	cubeVertexTextureCoordBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
 	
@@ -272,6 +339,7 @@ function drawScene() {
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	
 	mat4.perspective(45, gl.vWidth / gl.vHeight, 0.1, 100.0, pMatrix);
+	
 	mat4.identity(mvMatrix);
 	
 	mat4.translate(mvMatrix, [0.0, 0.0, -10.0]);
@@ -285,6 +353,10 @@ function drawScene() {
 	gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
 	cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
 	
+	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexNormalBuffer);
+	gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute,
+	cubeVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
 	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
 	gl.vertexAttribPointer(shaderProgram.textureCoordAttribute,
 	cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -292,6 +364,21 @@ function drawScene() {
 	gl.activeTexture(gl.TEXTURE0);
 	gl.bindTexture(gl.TEXTURE_2D, metalCrateTexture);
 	gl.uniform1i(shaderProgram.samplerUniform, 0);
+	
+	
+	gl.uniform3f(shaderProgram.ambientColorUniform,
+	0.1, 0.1, 0.1);
+	
+	var lightingDirection = [0.3, 0.7, 0.2];
+	
+	var adjustedLD = vec3.create();
+	vec3.normalize(lightingDirection, adjustedLD);
+	vec3.scale(adjustedLD, -1);
+	gl.uniform3fv(shaderProgram.lightingDirectionUniform, adjustedLD);
+	
+	gl.uniform3f(shaderProgram.directionalColorUniform,
+	0.9, 0.75, 0.6);
+	
 	
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
 	setMatrixUniforms();
