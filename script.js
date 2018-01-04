@@ -15,9 +15,11 @@ var rMatrix = mat4.create();
 var missingTexture;
 var metalCrateTexture;
 var lgmTexture;
+var metalCrateAlphaTexture;
+var metalCrate2Texture;
 
 var texturesLoaded = 0;
-var totalTextures = 3;
+var totalTextures = 0;
 
 var prevTime = 0;
 
@@ -31,7 +33,18 @@ var cubeRotationZVel = 0.0;
 
 var keySet = {};
 
+var mouseDown = false;
+var lastMouseX = null;
+var lastMouseY = null;
+var clickMouseX = null;
+var cliclMouseY = null;
+
+var mouseDiffX = 0;
+var mouseDiffY = 0;
+
 var modelInstances = [];
+
+var blending = true;
 
 
 window.addEventListener("keydown", function(event) {
@@ -55,7 +68,7 @@ function ModelInstance(model) {
 function initGL(canvas) {
 	gl = null;
 	try {
-		gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+		gl = canvas.getContext("webgl", {alpha: false}) || canvas.getContext("experimental-webgl");
 		gl.vWidth = canvas.width;
 		gl.vHeight = canvas.height;
 	}
@@ -142,6 +155,8 @@ function initShaders() {
 	shaderProgram.lightingDirectionUniform = gl.getUniformLocation(shaderProgram, "uLightingDirection");
 	
 	shaderProgram.directionalColorUniform = gl.getUniformLocation(shaderProgram, "uDirectionalColor");
+	
+	shaderProgram.alphaUniform = gl.getUniformLocation(shaderProgram, "uAlpha");
 }
 
 
@@ -162,6 +177,7 @@ function initTextures() {
 		handleTextureLoaded(missingTexture);
 	};
 	missingTexture.image.src = "./textures/missing_texture.png";
+	totalTextures++;
 	
 	
 	metalCrateTexture = gl.createTexture();
@@ -170,6 +186,16 @@ function initTextures() {
 		handleTextureLoaded(metalCrateTexture);
 	};
 	metalCrateTexture.image.src = "./textures/metal_crate.jpg";
+	totalTextures++;
+	
+	
+	metalCrateAlphaTexture = gl.createTexture();
+	metalCrateAlphaTexture.image = new Image();
+	metalCrateAlphaTexture.image.onload = function() {
+		handleTextureLoaded(metalCrateAlphaTexture);
+	};
+	metalCrateAlphaTexture.image.src = "./textures/metal_crate_with_alpha.png";
+	totalTextures++;
 	
 	
 	lgmTexture = gl.createTexture();
@@ -178,7 +204,16 @@ function initTextures() {
 		handleTextureLoaded(lgmTexture);
 	};
 	lgmTexture.image.src = "./textures/lgm.png";
+	totalTextures++;
 	
+	
+	metalCrate2Texture = gl.createTexture();
+	metalCrate2Texture.image = new Image();
+	metalCrate2Texture.image.onload = function() {
+		handleTextureLoaded(metalCrate2Texture);
+	};
+	metalCrate2Texture.image.src = "./textures/metal_crate_2_with_alpha.png";
+	totalTextures++;
 }
 
 function handleTextureLoaded(texture) {
@@ -347,7 +382,15 @@ function drawScene() {
 	mat4.rotateX(mvMatrix, cubeRotationX);
 	mat4.rotateY(mvMatrix, cubeRotationY);
 	mat4.rotateZ(mvMatrix, cubeRotationZ);
-	document.getElementById("rotationZText").innerHTML = cubeRotationX + "";
+	
+	if(mouseDown) {
+		mat4.rotateY(mvMatrix, mouseDiffX / 300.0);
+		mat4.rotateX(mvMatrix, mouseDiffY / 300.0);
+		document.getElementById("mousePositionClickText").innerHTML = "yes";
+	}
+	else {
+		document.getElementById("mousePositionClickText").innerHTML = "no";
+	}
 	
 	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
 	gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
@@ -362,14 +405,26 @@ function drawScene() {
 	cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
 	
 	gl.activeTexture(gl.TEXTURE0);
-	gl.bindTexture(gl.TEXTURE_2D, metalCrateTexture);
+	gl.bindTexture(gl.TEXTURE_2D, metalCrate2Texture);
 	gl.uniform1i(shaderProgram.samplerUniform, 0);
+	
+	if(blending) {
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+		gl.enable(gl.BLEND);
+		//gl.disable(gl.DEPTH_TEST);
+		gl.uniform1f(shaderProgram.alphaUniform, 1.0);
+	}
+	else {
+		gl.disable(gl.BLEND);
+		gl.enable(gl.DEPTH_TEST);
+	}
+	
 	
 	
 	gl.uniform3f(shaderProgram.ambientColorUniform,
-	0.1, 0.1, 0.1);
+	0.1, 0.12, 0.18);
 	
-	var lightingDirection = [0.3, 0.7, 0.2];
+	var lightingDirection = [0.4, -0.7, -0.3];
 	
 	var adjustedLD = vec3.create();
 	vec3.normalize(lightingDirection, adjustedLD);
@@ -389,12 +444,6 @@ function animate() {
 	var currTime = (new Date()).getTime();
 	if(prevTime != 0) {
 		var dt = currTime - prevTime;
-		
-		/*
-		cubeRotationX += dt / 1000 * Math.PI * xRotVal;
-		cubeRotationY += dt / 1000 * Math.PI * yRotVal;
-		cubeRotationZ += dt / 1000 * Math.PI * zRotVal;
-		*/
 		
 		var speedMult = 10.0;
 		var preCalc = dt / 1000 * Math.PI * 2 * speedMult;
@@ -442,6 +491,31 @@ function handleKeys() {
 	}
 }
 
+function handleMouseDown(event) {
+	mouseDown = true;
+	clickMouseX = event.clientX;
+	clickMouseY = event.clientY;
+	
+	//lastMouseX = event.clientX;
+	//lastMouseY = event.clientY;
+}
+
+function handleMouseUp(event) {
+	mouseDown = false;
+}
+
+function handleMouseMove(event) {
+	if(!mouseDown) return;
+	
+	mouseDiffX = event.clientX - clickMouseX;
+	mouseDiffY = event.clientY - clickMouseY;
+	
+	document.getElementById("mousePositionXText").innerHTML = "" + mouseDiffX;
+	document.getElementById("mousePositionYText").innerHTML = "" + mouseDiffY;
+	
+	//TODO
+}
+
 
 function start() {
 	canvas = document.getElementById("canvas");
@@ -449,6 +523,7 @@ function start() {
 	
 	if(gl) {
 		gl.clearColor(0.0, 0.0, 0.0, 1.0);
+		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.clearDepth(1.0);
 		gl.enable(gl.DEPTH_TEST);
 		gl.depthFunc(gl.LEQUAL);
@@ -461,6 +536,10 @@ function start() {
 		
 		document.onkeydown = handleKeyDown;
 		document.onkeyup   = handleKeyUp;
+		
+		canvas.onmousedown = handleMouseDown;
+		document.onmouseup = handleMouseUp;
+		document.onmousemove = handleMouseMove;
 		
 		setInterval(function() {
 			if(texturesLoaded == totalTextures) {

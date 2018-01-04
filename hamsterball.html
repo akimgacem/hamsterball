@@ -39,11 +39,13 @@ varying vec2 vTextureCoord;
 
 varying vec3 vLightWeighting;
 
+uniform float uAlpha;
+
 uniform sampler2D uSampler;
 
 void main(void) {
-	vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
-    gl_FragColor = vec4(textureColor.rgb * vLightWeighting, textureColor.a);
+	vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t), -1.0);
+    gl_FragColor = vec4(textureColor.rgb * vLightWeighting, textureColor.a * uAlpha);
 }
 </script>
 
@@ -112,6 +114,25 @@ rotation Z
 <span id="rotationZText">0.0000</span>
 </td>
 </tr>
+</table>
+<br>
+<table width="90%">
+<tr>
+<td width="40%" align="center">
+mouse relative X position
+<br>
+<span id="mousePositionXText">0</span>
+</td>
+<td width="40%" align="center">
+mouse relative Y position
+<br>
+<span id="mousePositionYText">0</span>
+</td>
+<td width="20%" align="center">
+is mouse clicked?
+<br>
+<span id="mousePositionClickText">no</span>
+</td>
 </table>
 <br>
 Use the arrow keys, page up and page down to change the cube rotation speed.
