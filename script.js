@@ -21,6 +21,9 @@ var metalCrate2Texture;
 var texturesLoaded = 0;
 var totalTextures = 0;
 
+var modelsLoaded = 0;
+var totalModels = 0;
+
 var prevTime = 0;
 
 var cubeRotationX = 0.0;
@@ -53,15 +56,16 @@ window.addEventListener("keydown", function(event) {
 	}
 }, false);
 
-function ModelInstance(model) {
-	this.vertexPositionBuffer = [];
-	this.vertexNormalBuffer = [];
-	this.vertexTextureCoordBuffer = [];
-	this.vertexIndexBuffer = [];
+function ModelInstance() {
+	this.vertexPositionBuffer;
+	this.vertexNormalBuffer;
+	this.vertexTextureCoordBuffer;
 	
 	this.texture = null;
 	
 	this.mvMatrix = mat4.identity(mat4.create());
+	
+	this.mvMatrix = mat4.translate(this.mvMatrix, [-10.0, 0.0, 0.0]);
 	
 }
 
@@ -228,6 +232,62 @@ function handleTextureLoaded(texture) {
 	texturesLoaded++;
 }
 
+function loadModels() {
+	var request = new XMLHttpRequest();
+	request.open("GET", "./objects/sphere_hamsterball.json");
+	request.onreadystatechange = function() {
+		if(request.readyState == 4 && request.status == 200) {
+			handleLoadedModels(JSON.parse(request.responseText));
+		}
+	}
+	request.send();
+	totalModels++;
+}
+
+function handleLoadedModels(modelData) {
+	modelVertexNormalBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, modelVertexNormalBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData.mVertexNormals), gl.STATIC_DRAW);
+	modelVertexNormalBuffer.itemSize = 3;
+	modelVertexNormalBuffer.numItems = modelData.mVertexNormals.length / 3;
+	
+	var texCoords = [];
+	for(i = 0; i < modelData.mTextureCoords.length; i += 3) {
+		texCoords.push(modelData.mTextureCoords[i]);
+		texCoords.push(modelData.mTextureCoords[i+1]);
+	}
+	
+	modelVertexTextureCoordBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, modelVertexTextureCoordBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texCoords), gl.STATIC_DRAW);
+	modelVertexTextureCoordBuffer.itemSize = 2;
+	modelVertexTextureCoordBuffer.numItems = texCoords.length / 2;
+	
+	modelVertexPositionBuffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, modelVertexPositionBuffer);
+	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData.mVertexPoints), gl.STATIC_DRAW);
+	modelVertexPositionBuffer.itemSize = 3;
+	modelVertexPositionBuffer.numItems = modelData.mVertexPoints.length / 3;
+	
+	modelsLoaded++;
+	
+	var model = new ModelInstance();
+	model.vertexPositionBuffer = modelVertexPositionBuffer;
+	model.vertexNormalBuffer = modelVertexNormalBuffer;
+	model.vertexTextureCoordBuffer = modelVertexTextureCoordBuffer;
+	
+	model.texture = gl.createTexture();
+	model.texture.image = new Image();
+	model.texture.image.onload = function() {
+		handleTextureLoaded(model.texture);
+	};
+	model.texture.image.src = "./objects/" + modelData.texturePath;
+	totalTextures++;
+	
+	modelInstances.push(model);
+	
+}
+
 
 function initBuffers() {
 	
@@ -384,14 +444,31 @@ function drawScene() {
 	mat4.rotateZ(mvMatrix, cubeRotationZ);
 	
 	if(mouseDown) {
-		mat4.rotateY(mvMatrix, mouseDiffX / 300.0);
-		mat4.rotateX(mvMatrix, mouseDiffY / 300.0);
+		mat4.rotateX(mvMatrix, mouseDiffY * Math.PI * 0.5 / 400.0);
+		mat4.rotateY(mvMatrix, mouseDiffX * Math.PI * 0.5 / 400.0);
 		document.getElementById("mousePositionClickText").innerHTML = "yes";
 	}
 	else {
 		document.getElementById("mousePositionClickText").innerHTML = "no";
 	}
 	
+	
+	//ambient light
+	gl.uniform3f(shaderProgram.ambientColorUniform,
+	0.17, 0.22, 0.32);
+	
+	//directional light direction
+	var lightingDirection = [0.4, -0.7, -0.3];
+	
+	var adjustedLD = vec3.create();
+	vec3.normalize(lightingDirection, adjustedLD);
+	vec3.scale(adjustedLD, -1);
+	gl.uniform3fv(shaderProgram.lightingDirectionUniform, adjustedLD);
+	
+	gl.uniform3f(shaderProgram.directionalColorUniform,
+	0.9, 0.75, 0.6);
+	
+	//drawing the metal cube
 	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
 	gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
 	cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -408,36 +485,38 @@ function drawScene() {
 	gl.bindTexture(gl.TEXTURE_2D, metalCrate2Texture);
 	gl.uniform1i(shaderProgram.samplerUniform, 0);
 	
-	if(blending) {
-		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-		gl.enable(gl.BLEND);
-		//gl.disable(gl.DEPTH_TEST);
-		gl.uniform1f(shaderProgram.alphaUniform, 1.0);
-	}
-	else {
-		gl.disable(gl.BLEND);
-		gl.enable(gl.DEPTH_TEST);
-	}
-	
-	
-	
-	gl.uniform3f(shaderProgram.ambientColorUniform,
-	0.1, 0.12, 0.18);
-	
-	var lightingDirection = [0.4, -0.7, -0.3];
-	
-	var adjustedLD = vec3.create();
-	vec3.normalize(lightingDirection, adjustedLD);
-	vec3.scale(adjustedLD, -1);
-	gl.uniform3fv(shaderProgram.lightingDirectionUniform, adjustedLD);
-	
-	gl.uniform3f(shaderProgram.directionalColorUniform,
-	0.9, 0.75, 0.6);
-	
-	
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
 	setMatrixUniforms();
 	gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+	
+	//drawing all objects that were loaded from disk
+	for(i = 0; i < totalModels; i++) {
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, modelInstances[i].vertexPositionBuffer);
+		gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+		modelInstances[i].vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, modelInstances[i].vertexNormalBuffer);
+		gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute,
+		modelInstances[i].vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+		
+		gl.bindBuffer(gl.ARRAY_BUFFER, modelInstances[i].vertexTextureCoordBuffer);
+		gl.vertexAttribPointer(shaderProgram.textureCoordAttribute,
+		modelInstances[i].vertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+		
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, modelInstances[i].texture);
+		gl.uniform1i(shaderProgram.samplerUniform, 0);
+		
+		mvMatrix = modelInstances[i].mvMatrix;
+		mvMatrix = mat4.multiply(modelInstances[i].mvMatrix, mvMatrix);
+		
+		setMatrixUniforms();
+		gl.drawArrays(gl.TRIANGLES, 0, modelInstances[i].vertexPositionBuffer.numItems);
+		
+	}
+	
+	
 }
 
 function animate() {
@@ -526,13 +605,18 @@ function start() {
 		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.clearDepth(1.0);
 		gl.enable(gl.DEPTH_TEST);
+		gl.enable(gl.BLEND);
 		gl.depthFunc(gl.LEQUAL);
+		
+		gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 		
 		initShaders();
 		
 		initBuffers();
 		
 		initTextures();
+		
+		loadModels();
 		
 		document.onkeydown = handleKeyDown;
 		document.onkeyup   = handleKeyUp;
@@ -542,7 +626,7 @@ function start() {
 		document.onmousemove = handleMouseMove;
 		
 		setInterval(function() {
-			if(texturesLoaded == totalTextures) {
+			if(texturesLoaded == totalTextures && modelsLoaded == totalModels) {
 				requestAnimationFrame(animate);
 				handleKeys();
 				drawScene();
