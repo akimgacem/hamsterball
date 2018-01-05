@@ -40,14 +40,17 @@ var mouseDown = false;
 var lastMouseX = null;
 var lastMouseY = null;
 var clickMouseX = null;
-var cliclMouseY = null;
+var clickMouseY = null;
 
 var mouseDiffX = 0;
 var mouseDiffY = 0;
 
 var modelInstances = [];
 
-var blending = true;
+var ballModel;
+
+var speedVel = 0;
+var speedDir = 0;
 
 
 window.addEventListener("keydown", function(event) {
@@ -63,9 +66,9 @@ function ModelInstance() {
 	
 	this.texture = null;
 	
-	this.mvMatrix = mat4.identity(mat4.create());
-	
-	this.mvMatrix = mat4.translate(this.mvMatrix, [-10.0, 0.0, 0.0]);
+	this.mvMatrix = mat4.create();
+	mat4.identity(this.mvMatrix);
+	mat4.translate(this.mvMatrix, [0.0, 0.0, 0.0]);
 	
 }
 
@@ -237,14 +240,14 @@ function loadModels() {
 	request.open("GET", "./objects/sphere_hamsterball.json");
 	request.onreadystatechange = function() {
 		if(request.readyState == 4 && request.status == 200) {
-			handleLoadedModels(JSON.parse(request.responseText));
+			ballModel = handleLoadedModels(JSON.parse(request.responseText), false);
 		}
 	}
 	request.send();
 	totalModels++;
 }
 
-function handleLoadedModels(modelData) {
+function handleLoadedModels(modelData, addToModelInstances) {
 	modelVertexNormalBuffer = gl.createBuffer();
 	gl.bindBuffer(gl.ARRAY_BUFFER, modelVertexNormalBuffer);
 	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData.mVertexNormals), gl.STATIC_DRAW);
@@ -285,7 +288,6 @@ function handleLoadedModels(modelData) {
 	totalTextures++;
 	
 	modelInstances.push(model);
-	
 }
 
 
@@ -433,19 +435,26 @@ function drawScene() {
 	gl.viewport(0, 0, gl.vWidth, gl.vHeight);
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 	
-	mat4.perspective(45, gl.vWidth / gl.vHeight, 0.1, 100.0, pMatrix);
+	mat4.perspective(60, gl.vWidth / gl.vHeight, 0.1, 100.0, pMatrix);
 	
 	mat4.identity(mvMatrix);
 	
-	mat4.translate(mvMatrix, [0.0, 0.0, -10.0]);
+	mat4.translate(mvMatrix, [0.0, 0.0, 0.0]);
+	
+	mat4.rotateX(pMatrix, mouseDiffY / 500.0);
+	mat4.rotateY(pMatrix, mouseDiffX / 500.0);
+	
+	mat4.translate(pMatrix, [0.0, 0.0, -10.0]);
+	
+	
 	
 	mat4.rotateX(mvMatrix, cubeRotationX);
 	mat4.rotateY(mvMatrix, cubeRotationY);
 	mat4.rotateZ(mvMatrix, cubeRotationZ);
 	
 	if(mouseDown) {
-		mat4.rotateX(mvMatrix, mouseDiffY * Math.PI * 0.5 / 400.0);
-		mat4.rotateY(mvMatrix, mouseDiffX * Math.PI * 0.5 / 400.0);
+		mat4.rotateX(pMatrix, mouseDiffY * Math.PI * 0.5 / 400.0);
+		mat4.rotateY(pMatrix, mouseDiffX * Math.PI * 0.5 / 400.0);
 		document.getElementById("mousePositionClickText").innerHTML = "yes";
 	}
 	else {
@@ -469,6 +478,7 @@ function drawScene() {
 	0.9, 0.75, 0.6);
 	
 	//drawing the metal cube
+	/*
 	gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
 	gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
 	cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
@@ -488,9 +498,10 @@ function drawScene() {
 	gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
 	setMatrixUniforms();
 	gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+	*/
 	
 	//drawing all objects that were loaded from disk
-	for(i = 0; i < totalModels; i++) {
+	for(i = 0; i < modelInstances.length; i++) {
 		
 		gl.bindBuffer(gl.ARRAY_BUFFER, modelInstances[i].vertexPositionBuffer);
 		gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
@@ -508,14 +519,52 @@ function drawScene() {
 		gl.bindTexture(gl.TEXTURE_2D, modelInstances[i].texture);
 		gl.uniform1i(shaderProgram.samplerUniform, 0);
 		
-		mvMatrix = modelInstances[i].mvMatrix;
-		mvMatrix = mat4.multiply(modelInstances[i].mvMatrix, mvMatrix);
+		mat4.identity(mvMatrix);
+		mvMatrix = mat4.set(modelInstances[i].mvMatrix, mvMatrix);
+		//mat4.multiply(mvMatrix, modelInstances[i].mvMatrix);
 		
 		setMatrixUniforms();
 		gl.drawArrays(gl.TRIANGLES, 0, modelInstances[i].vertexPositionBuffer.numItems);
 		
+		
 	}
 	
+}
+
+//temp
+function showMatrix(matrix) {
+	var s = "";
+	for(i = 0; i < 4; i++) {
+		for (j = 0; j < 4; j++) {
+			s += matrix[4 * i + j] + " ";
+		}
+		s += "\n";
+	}
+	return s;
+}
+
+function drawModel(model) {
+	gl.bindBuffer(gl.ARRAY_BUFFER, model.vertexPositionBuffer);
+	gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,
+	model.vertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	gl.bindBuffer(gl.ARRAY_BUFFER, model.vertexNormalBuffer);
+	gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute,
+	model.vertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	gl.bindBuffer(gl.ARRAY_BUFFER, model.vertexTextureCoordBuffer);
+	gl.vertexAttribPointer(shaderProgram.TextureCoordAttribute,
+	model.vertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+	
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, model.texture);
+	gl.uniform1i(shaderProgram.samplerUniform, 0);
+	
+	mat4.identity(mvMatrix);
+	mat4.translate(mvMatrix, model.position);
+	
+	setMatrixUniforms();
+	gl.drawArrays(gl.TRIANGLES, 0, model.vertexPositionBuffer.numItems);
 	
 }
 
@@ -523,17 +572,21 @@ function animate() {
 	var currTime = (new Date()).getTime();
 	if(prevTime != 0) {
 		var dt = currTime - prevTime;
-		
-		var speedMult = 10.0;
-		var preCalc = dt / 1000 * Math.PI * 2 * speedMult;
-		
-		cubeRotationX += preCalc * cubeRotationXVel;
-		cubeRotationY += preCalc * cubeRotationYVel;
-		cubeRotationZ += preCalc * cubeRotationZVel;
-		
+		/*
 		document.getElementById("rotationXText").innerHTML = cubeRotationXVel.toFixed(4);
 		document.getElementById("rotationYText").innerHTML = cubeRotationYVel.toFixed(4);
 		document.getElementById("rotationZText").innerHTML = cubeRotationZVel.toFixed(4);
+		*/
+		
+		document.getElementById("speedVelText").innerHTML = speedVel.toFixed(4);
+		document.getElementById("speedDirText").innerHTML = speedDir.toFixed(4);
+		
+		var prevSpeedVel = speedVel;
+		
+		speedVel -= speedVel * speedVel * 0.001 + 0.01;
+		if(speedVel * prevSpeedVel < 0) {
+			speedVel = 0;
+		}
 		
 	}
 	
@@ -550,24 +603,47 @@ function handleKeyUp(event) {
 }
 
 function handleKeys() {
+	var speedX = Math.sin(speedDir) * speedVel;
+	var speedZ = Math.cos(speedDir) * speedVel;
 	if(keySet[38]) { //up arrow
-		cubeRotationXVel -= 0.0001;
+		if(keySet[37] || keySet[39]) {
+			speedZ += 0.05 * Math.sqrt(2);
+		}
+		else {
+			speedZ += 0.1;
+		}
+		//mat4.rotateX(modelInstances[0].mvMatrix, 0.01);
 	}
 	if(keySet[40]) { //down arrow
-		cubeRotationXVel += 0.0001;
+		if(keySet[37] || keySet[39]) {
+			speedZ -= 0.05 * Math.sqrt(2);
+		}
+		else {
+			speedZ -= 0.1;
+		}
 	}
 	if(keySet[37]) { //left arrow
-		cubeRotationYVel -= 0.0001;
+		if(keySet[38] || keySet[40]) {
+			speedX -= 0.05 * Math.sqrt(2);
+		}
+		else {
+			speedX -= 0.1;
+		}
 	}
 	if(keySet[39]) { //right arrow
-		cubeRotationYVel += 0.0001;
+		if(keySet[38] || keySet[40]) {
+			speedX += 0.05 * Math.sqrt(2);
+		}
+		else {
+			speedX += 0.1;
+		}
 	}
 	if(keySet[33]) { //page up
-		cubeRotationZVel -= 0.0001;
 	}
 	if(keySet[34]) { //page down
-		cubeRotationZVel += 0.0001;
 	}
+	speedVel = Math.sqrt(speedX * speedX + speedZ * speedZ);
+	speedDir = Math.atan2(speedX, speedZ);
 }
 
 function handleMouseDown(event) {
@@ -581,6 +657,11 @@ function handleMouseDown(event) {
 
 function handleMouseUp(event) {
 	mouseDown = false;
+	mouseDiffX = 0;
+	mouseDiffY = 0;
+	
+	document.getElementById("mousePositionXText").innerHTML = "" + mouseDiffX;
+	document.getElementById("mousePositionYText").innerHTML = "" + mouseDiffY;
 }
 
 function handleMouseMove(event) {
@@ -592,7 +673,6 @@ function handleMouseMove(event) {
 	document.getElementById("mousePositionXText").innerHTML = "" + mouseDiffX;
 	document.getElementById("mousePositionYText").innerHTML = "" + mouseDiffY;
 	
-	//TODO
 }
 
 
